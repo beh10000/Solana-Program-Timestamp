@@ -1,0 +1,38 @@
+Project Overview
+The objective is to develop a command-line tool to get the timestamp when a Solana program was deployed for the first time. The command-line tool will take the program ID as an argument and print the timestamp of the first deployment.
+
+Technical Requirements
+Programming Language: Preferably TypeScript, but other languages are acceptable.
+Access on-chain data: Use Solana RPC endpoints or Solana official libraries.
+Performance: Optimize the tool for performance.
+No third-party APIs: Access on-chain data directly.
+
+
+Bonus Points
+Logs: Implement a --verbose option for logging.
+Error Handling: Handle connection issues with access endpoints.
+Robustness: Use multiple endpoints to ensure tool robustness.
+Documentation: Provide a comprehensive README.md.
+
+
+Deliverables
+GitHub Repository: Include all source code and a detailed commit history.
+Dockerfile: Optional, for Dockerizing the application.
+README.md: Detailed setup, usage instructions, and system architecture.
+Tests: Any written tests for the application.
+The primary deliverable is a GitHub repository encompassing all the source code, with a commit history reflecting the progress. Additional recognition will be given for including:
+
+A Dockerfile, if you choose to Dockerize the application.
+A comprehensive README.md detailing setup, usage, and system architecture.
+Any tests written for the application
+
+
+Submission
+Please follow these steps for submitting your work
+
+Please bundle your work using:
+git bundle create kinetic-takehome.bundle
+
+Attach the bundle file to an email and send as a reply to this email
+We will extract it using the following on our side:
+git clone kinetic-takehome.bundle
