@@ -3,7 +3,50 @@
 import { Command } from 'commander';
 import { getTimestamp } from './commands/getTimestamp';
 import { setupLogger } from './utils/logger';
-
+import { 
+  addRpcUrl, 
+  removeRpcUrl, 
+  getRpcUrls, 
+  getDefaultRpcUrl,
+  setDefaultRpcUrl
+} from './utils/config';
+import fetch from 'node-fetch';
+import pino from 'pino';
+/**
+ * Validates a Solana RPC endpoint by making a test request
+ * @param url The RPC endpoint URL to validate
+ * @param logger Logger instance
+ * @returns A promise that resolves if the endpoint is valid
+ */
+async function validateRpcEndpoint(url: string, logger: pino.Logger): Promise<void> {
+    logger.debug(`Validating RPC endpoint: ${url}`);
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getVersion'
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      logger.debug(`Successfully connected to RPC endpoint. Response: ${JSON.stringify(data)}`);
+    } catch (error) {
+      logger.error({ error }, `Invalid RPC endpoint: ${url}`);
+      console.error(`Failed to validate RPC endpoint: ${url}`);
+      console.error('Please provide a valid Solana RPC URL');
+      throw error;
+    }
+  }
 const program = new Command();
 
 program
@@ -19,10 +62,32 @@ program
   .option('-e, --endpoint <endpoint>', 'Custom RPC endpoint URL')
   .action(async (programId, options) => {
     const logger = setupLogger(options.verbose);
+    // Validate RPC endpoint if provided
+    let endpoints: string[] = [];
+    if (options.endpoint) {
+      try {
+        await validateRpcEndpoint(options.endpoint, logger);
+        endpoints = [options.endpoint, 'https://api.mainnet-beta.solana.com'];
+      } catch (error) {
+        process.exit(1);
+      }
+    }
+    else {
+      // Try to get the default RPC endpoint from config
+      const defaultRpcUrl = getDefaultRpcUrl(logger);
+      if (!defaultRpcUrl) {
+        logger.debug('No RPC endpoint provided and no default endpoint configured, attempting with public rpc. Consider providing your own endpoint with the --endpoint flag or with "rpc add --default <url>" command.');
+        endpoints.push("https://api.mainnet-beta.solana.com");
+      }
+      else {
+        endpoints = [defaultRpcUrl, ...getRpcUrls(logger).filter(url => url !== defaultRpcUrl), "https://api.mainnet-beta.solana.com"];
+      }
+      
+      logger.debug(`Using default RPC endpoint: ${defaultRpcUrl}`);
+    }
     try {
-      const timestamp = await getTimestamp(programId, {
+      const timestamp = await getTimestamp(programId, endpoints,{
         verbose: options.verbose,
-        endpoint: options.endpoint,
         logger
       });
       
@@ -33,4 +98,114 @@ program
     }
   });
 
-program.parse(); 
+const rpcCommand = program
+  .command('rpc')
+  .description('Manage RPC endpoint URLs');
+
+rpcCommand
+  .command('add')
+  .description('Add an RPC endpoint URL to the configuration')
+  .argument('<url>', 'RPC endpoint URL')
+  .option('-d, --default', 'Set as default RPC URL')
+  .option('-v, --verbose', 'Enable verbose logging')
+  .action(async (url, options) => {
+    const logger = setupLogger(options.verbose);
+    
+    try {
+      // Validate the RPC endpoint
+      await validateRpcEndpoint(url, logger);
+      
+      // Check if there's no default URL set and set this one as default if it's the first
+      const defaultRpcUrl = getDefaultRpcUrl(logger);
+      const urls = getRpcUrls(logger);
+      const setAsDefault = options.default || (!defaultRpcUrl && urls.length === 0);
+      
+      // Add the validated URL to configuration
+      if (addRpcUrl(url, setAsDefault, logger)) {
+        console.log(`Added RPC URL: ${url}${setAsDefault ? ' (default)' : ''}`);
+      } else {
+        console.error('Failed to add RPC URL to configuration');
+        process.exit(1);
+      }
+    } catch (error) {
+      process.exit(1);
+    }
+  });
+
+
+
+rpcCommand
+  .command('remove')
+  .description('Remove an RPC endpoint URL from the configuration')
+  .argument('<url>', 'RPC endpoint URL')
+  .option('-v, --verbose', 'Enable verbose logging')
+  .action((url, options) => {
+    const logger = setupLogger(options.verbose);
+    const defaultUrl = getDefaultRpcUrl(logger);
+    const isRemovingDefault = url === defaultUrl;
+    
+    if (removeRpcUrl(url, logger)) {
+      console.log(`Removed RPC URL: ${url}`);
+      
+      // If we removed the default URL, set the last remaining URL as default
+      if (isRemovingDefault) {
+        const remainingUrls = getRpcUrls(logger);
+        if (remainingUrls.length > 0) {
+          const newDefault = remainingUrls[remainingUrls.length - 1];
+          if (setDefaultRpcUrl(newDefault, logger)) {
+            console.log(`Set new default RPC URL: ${newDefault}`);
+          } else {
+            logger.error('Failed to set new default RPC URL');
+          }
+        }
+      }
+    } else {
+      console.error('Failed to remove RPC URL');
+      process.exit(1);
+    }
+  });
+
+rpcCommand
+  .command('list')
+  .description('List all configured RPC endpoint URLs')
+  .option('-v, --verbose', 'Enable verbose logging')
+  .action((options) => {
+    const logger = setupLogger(options.verbose);
+    const urls = getRpcUrls(logger);
+    const defaultUrl = getDefaultRpcUrl(logger);
+    
+    if (urls.length === 0) {
+      console.log('No RPC URLs configured');
+    } else {
+      console.log('Configured RPC URLs:');
+      urls.forEach(url => {
+        console.log(`${url === defaultUrl ? '* ' : '  '}${url}`);
+      });
+      console.log('\n* = default URL');
+    }
+    
+    // Add explicit exit to prevent hanging
+    process.exit(0);
+  });
+
+rpcCommand
+  .command('set-default')
+  .description('Set the default RPC endpoint URL')
+  .argument('<url>', 'RPC endpoint URL')
+  .option('-v, --verbose', 'Enable verbose logging')
+  .action((url, options) => {
+    const logger = setupLogger(options.verbose);
+    if (setDefaultRpcUrl(url, logger)) {
+      console.log(`Set default RPC URL: ${url}`);
+    } else {
+      console.error('Failed to set default RPC URL. Make sure the URL is in your configuration.');
+      process.exit(1);
+    }
+  });
+
+// Only parse arguments when running as the main script, not when imported
+if (require.main === module) {
+  program.parse();
+}
+
+export { validateRpcEndpoint }; 
