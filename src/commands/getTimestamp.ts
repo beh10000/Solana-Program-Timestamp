@@ -1,83 +1,212 @@
 import { Logger } from 'pino';
 import bs58 from 'bs58';
 import { getRpcUrls, getDefaultRpcUrl } from '../utils/config';
-import { Connection } from '@solana/web3.js';
+import { Connection, PublicKey, Finality } from '@solana/web3.js';
 import { setupLogger } from '../utils/logger';
+
 export interface GetTimestampOptions {
   verbose?: boolean;
   endpoint?: string;
   logger?: Logger;
+  retries?: number;
+  retryDelay?: number;
+}
+
+/**
+ * Helper function to retry asynchronous operations.
+ */
+async function retryOperation<T>(
+    operation: () => Promise<T>,
+    maxRetries: number,
+    delayMs: number,
+    logger: Logger,
+    operationName: string = 'Operation'
+): Promise<T> {
+    let attempts = 0;
+    while (attempts < maxRetries) {
+        try {
+            return await operation();
+        } catch (error) {
+            attempts++;
+            const isLastAttempt = attempts >= maxRetries;
+            const level = isLastAttempt ? 'error' : 'warn';
+            logger[level](
+                { error },
+                `${operationName} attempt ${attempts} failed.${isLastAttempt ? ` No more retries.` : ` Retrying in ${delayMs}ms...`}`
+            );
+            if (isLastAttempt) {
+                throw error;
+            }
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+    }
+    throw new Error(`${operationName} failed after ${maxRetries} attempts.`);
 }
 
 export async function getTimestamp(
-  programId: string, 
+  programId: string,
   endpoints: string[],
-  options?: { 
-    verbose?: boolean; 
-    logger?: Logger;
-  }
+  options?: GetTimestampOptions
 ): Promise<string> {
-  // Create a default logger if one isn't provided
   const logger = options?.logger || setupLogger(options?.verbose || false);
-  // Try each RPC URL until one works
   let lastError: Error | null = null;
-  
+  const maxRetries = options?.retries ?? 3;
+  const retryDelay = options?.retryDelay ?? 1000;
+
   for (const rpcUrl of endpoints) {
     try {
       logger?.debug(`Attempting to use RPC URL: ${rpcUrl}`);
-      
-      // Create connection with the current RPC URL
       const connection = new Connection(rpcUrl);
-      logger.debug(`Fetching deployment timestamp for program: ${programId}`);
-      // Validate the program ID before proceeding
+
+      logger.debug(`Validating program ID: ${programId}`);
       if (!isValidProgramId(programId)) {
-        logger.error(`Invalid program ID: ${programId}`);
         throw new Error(`Invalid program ID: ${programId}`);
       }
-      
       logger.debug(`Program ID validation passed: ${programId}`);
-      
-      const randomTimestamp = await requestTimestamp(connection, programId, logger);
-      
-      // If successful, return the timestamp
-      return randomTimestamp.toString();
+
+      const timestamp = await requestTimestamp(
+          connection,
+          programId,
+          logger,
+          maxRetries,
+          retryDelay
+      );
+
+      return timestamp.toString();
     } catch (error) {
       logger?.warn({ error, rpcUrl }, 'Failed to get timestamp from RPC URL');
       lastError = error as Error;
-      // Continue to the next RPC URL
     }
   }
-  
-  // If we get here, all RPC URLs failed
+
   throw new Error(`Failed to get timestamp using all configured RPC URLs: ${lastError?.message || 'Unknown error'}`);
 }
+
 /**
- * Requests the deployment timestamp for a Solana program
- * This is a placeholder implementation that returns a random timestamp
- * TODO: Implement actual logic to fetch the deployment timestamp from the blockchain
- * 
+ * Finds the signature of the first transaction involving the given address.
+ * Iterates backwards through transaction history using getSignaturesForAddress.
+ */
+async function findFirstSignature(
+    connection: Connection,
+    programIdStr: string,
+    logger: Logger,
+    maxRetries: number,
+    retryDelayMs: number
+): Promise<string | null> {
+    let oldestSignature: string | null = null;
+    let currentBeforeSignature: string | undefined = undefined;
+    const limit = 1000;
+    const programId = new PublicKey(programIdStr);
+    const operationName = `getSignaturesForAddress(${programIdStr})`;
+
+    logger.debug(`Starting search for the first signature for ${programIdStr}`);
+
+    while (true) {
+        logger.debug(`Fetching signatures before: ${currentBeforeSignature || 'latest'}`);
+
+        const signaturesInfo = await retryOperation(
+            () => connection.getSignaturesForAddress(
+                programId,
+                {
+                    limit: limit,
+                    before: currentBeforeSignature,
+                },
+            ),
+            maxRetries,
+            retryDelayMs,
+            logger,
+            operationName
+        );
+
+        if (!signaturesInfo || signaturesInfo.length === 0) {
+            logger.debug('No more signatures found. Reached the beginning of history or no transactions exist.');
+            break;
+        }
+        
+        
+        const oldestInBatch = signaturesInfo[signaturesInfo.length - 1];
+        oldestSignature = oldestInBatch.signature;
+        currentBeforeSignature = oldestSignature;
+
+        // Convert blockTime (seconds) to milliseconds for Date constructor
+        const oldestBlockTimeMs = typeof oldestInBatch.blockTime === 'number' ? oldestInBatch.blockTime * 1000 : null;
+        const oldestTimestampReadable = oldestBlockTimeMs ? new Date(oldestBlockTimeMs).toLocaleString() : 'N/A';
+
+        logger.debug(`Fetched ${signaturesInfo.length} signatures. Oldest in batch: ${oldestSignature} (Slot: ${oldestInBatch.slot}, Time: ${oldestTimestampReadable})`);
+
+        if (signaturesInfo.length < limit) {
+            logger.debug('Received less than limit, assuming this is the last page.');
+            break;
+        }
+    }
+
+    if (oldestSignature) {
+        logger.info(`Found the potentially oldest signature for ${programIdStr}: ${oldestSignature}`);
+    } else {
+        logger.warn(`Could not find any signatures for ${programIdStr}. The program might be unused or very new.`);
+    }
+
+    return oldestSignature;
+}
+
+/**
+ * Requests the deployment timestamp for a Solana program by finding its first transaction signature.
+ *
  * @param connection The Solana connection object
  * @param programId The program ID to get the timestamp for
  * @param logger Logger instance for debugging
- * @returns A random timestamp (will be replaced with actual deployment timestamp)
+ * @param maxRetries Max number of retries for RPC calls
+ * @param retryDelayMs Delay between retries in milliseconds
+ * @returns The timestamp (in milliseconds) of the first transaction, or throws an error.
  */
 async function requestTimestamp(
   connection: Connection,
   programId: string,
-  logger: any
+  logger: Logger,
+  maxRetries: number,
+  retryDelayMs: number
 ): Promise<number> {
-  logger.debug(`Requesting timestamp for program: ${programId}`);
-  
-  // This is a placeholder implementation that returns a random timestamp
-  // between Jan 1, 2020 and current date
-  const startDate = new Date('2020-01-01').getTime();
-  const endDate = new Date().getTime();
-  const randomTimestamp = Math.floor(startDate + Math.random() * (endDate - startDate));
-  
-  logger.debug(`Generated random timestamp: ${randomTimestamp}`);
-  logger.info(`Note: This is a placeholder implementation. Actual blockchain query will be implemented later.`);
-  
-  return randomTimestamp;
+  logger.debug(`Attempting to find the first signature for program: ${programId}`);
+
+  try {
+    const firstSignature = await findFirstSignature(connection, programId, logger, maxRetries, retryDelayMs);
+
+    if (!firstSignature) {
+      logger.error(`No transaction signatures found for program: ${programId}. Cannot determine deployment time.`);
+      throw new Error(`No transaction signatures found for program: ${programId}`);
+    }
+
+    const operationName = `getParsedTransaction(${firstSignature})`;
+    logger.debug(`Fetching transaction details for signature: ${firstSignature}`);
+
+    const txDetails = await retryOperation(
+        () => connection.getParsedTransaction(firstSignature, { maxSupportedTransactionVersion: 0 }),
+        maxRetries,
+        retryDelayMs,
+        logger,
+        operationName
+    );
+
+    if (!txDetails) {
+         logger.error(`Failed to retrieve transaction details for signature: ${firstSignature} after retries.`);
+         throw new Error(`Failed to retrieve transaction details for signature: ${firstSignature}`);
+    }
+
+    if (typeof txDetails.blockTime !== 'number') {
+        logger.error(`Could not retrieve valid blockTime for signature: ${firstSignature}. Transaction details: ${JSON.stringify(txDetails)}`);
+        throw new Error(`Could not retrieve valid blockTime for signature: ${firstSignature}`);
+    }
+
+    const timestamp = txDetails.blockTime * 1000;
+    logger.info(`Deployment timestamp determined from first transaction ${firstSignature}: ${timestamp}`);
+    logger.info(`Human-readable time (first transaction): ${new Date(timestamp).toLocaleString()}`);
+    return timestamp;
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error({ error }, `Error determining deployment timestamp for ${programId}: ${errorMessage}`);
+    throw new Error(`Failed to determine deployment timestamp for ${programId}: ${errorMessage}`);
+  }
 }
 
 /**
@@ -87,30 +216,23 @@ async function requestTimestamp(
  * @returns boolean indicating whether the program ID is valid
  */
 export function isValidProgramId(programId: string): boolean {
-  // Check if the input is a non-empty string
   if (!programId || typeof programId !== 'string') {
     return false;
   }
 
-  // Base58 character set: 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
   const base58Regex = /^[1-9A-HJ-NP-Za-km-z]+$/;
   
-  // Check if the string contains only base58 characters
   if (!base58Regex.test(programId)) {
     return false;
   }
   
-  // Decode the base58 string and check the byte length
   try {
-    // Use the imported bs58 instead of requiring it here
     const decoded = bs58.decode(programId);
     
-    // Check if the decoded byte array is exactly 32 bytes (Solana public key size)
     if (decoded.length !== 32) {
       return false;
     }
   } catch (error) {
-    // If decoding fails, it's not a valid base58 string
     return false;
   }
   

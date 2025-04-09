@@ -53,7 +53,6 @@ describe('RPC URL Management', () => {
       console.log('Step 3: Adding RPC URL to configuration');
       const result = config.addRpcUrl(validRpcUrl, false, logger);
       console.log(`Step 4: Checking result of addRpcUrl: ${result}`);
-      console.log(`RPC URL list: ${JSON.stringify(config.getRpcUrls(logger))}`);
       expect(result).toBe(true);
       
       console.log('Step 5: Verifying that mocked addRpcUrl was called with correct parameters');
