@@ -60,7 +60,7 @@ export const addRpcUrl = (url: string, setAsDefault = false, logger?: Logger): b
     config.rpcUrls.push(url);
   }
   
-  if (setAsDefault) {
+  if (setAsDefault || !config.defaultRpcUrl) {
     config.defaultRpcUrl = url;
   }
   
@@ -75,7 +75,13 @@ export const removeRpcUrl = (url: string, logger?: Logger): boolean => {
   
   // If the default URL was removed, unset it
   if (config.defaultRpcUrl === url) {
-    config.defaultRpcUrl = undefined;
+    if (config.rpcUrls.length > 0) {
+      // If there are remaining URLs, set the last one as default
+      config.defaultRpcUrl = config.rpcUrls[config.rpcUrls.length - 1];
+    } else {
+      // If no URLs remain, set to undefined
+      config.defaultRpcUrl = undefined;
+    }
   }
   
   return saveConfig(config, logger);

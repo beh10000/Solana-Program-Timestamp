@@ -12,6 +12,7 @@ import {
 } from './utils/config';
 import fetch from 'node-fetch';
 import pino from 'pino';
+const publicRpc = "https://api.mainnet-beta.solana.com";
 /**
  * Validates a Solana RPC endpoint by making a test request
  * @param url The RPC endpoint URL to validate
@@ -67,7 +68,7 @@ program
     if (options.endpoint) {
       try {
         await validateRpcEndpoint(options.endpoint, logger);
-        endpoints = [options.endpoint, 'https://api.mainnet-beta.solana.com'];
+        endpoints = [options.endpoint, publicRpc];
       } catch (error) {
         process.exit(1);
       }
@@ -77,10 +78,10 @@ program
       const defaultRpcUrl = getDefaultRpcUrl(logger);
       if (!defaultRpcUrl) {
         logger.debug('No RPC endpoint provided and no default endpoint configured, attempting with public rpc. Consider providing your own endpoint with the --endpoint flag or with "rpc add --default <url>" command.');
-        endpoints.push("https://api.mainnet-beta.solana.com");
+        endpoints.push(publicRpc);
       }
       else {
-        endpoints = [defaultRpcUrl, ...getRpcUrls(logger).filter(url => url !== defaultRpcUrl), "https://api.mainnet-beta.solana.com"];
+        endpoints = [defaultRpcUrl, ...getRpcUrls(logger).filter(url => url !== defaultRpcUrl), publicRpc];
       }
       
       logger.debug(`Using default RPC endpoint: ${defaultRpcUrl}`);
@@ -114,15 +115,11 @@ rpcCommand
     try {
       // Validate the RPC endpoint
       await validateRpcEndpoint(url, logger);
-      
-      // Check if there's no default URL set and set this one as default if it's the first
-      const defaultRpcUrl = getDefaultRpcUrl(logger);
-      const urls = getRpcUrls(logger);
-      const setAsDefault = options.default || (!defaultRpcUrl && urls.length === 0);
-      
+      const setAsDefault = options.default;
       // Add the validated URL to configuration
       if (addRpcUrl(url, setAsDefault, logger)) {
-        console.log(`Added RPC URL: ${url}${setAsDefault ? ' (default)' : ''}`);
+        const isDefault = getDefaultRpcUrl(logger) === url;
+        console.log(`Added RPC URL: ${url}${isDefault ? ' (default)' : ''}`);
       } else {
         console.error('Failed to add RPC URL to configuration');
         process.exit(1);
@@ -141,23 +138,14 @@ rpcCommand
   .option('-v, --verbose', 'Enable verbose logging')
   .action((url, options) => {
     const logger = setupLogger(options.verbose);
-    const defaultUrl = getDefaultRpcUrl(logger);
-    const isRemovingDefault = url === defaultUrl;
+    let currentDefault =getDefaultRpcUrl(logger);
     
     if (removeRpcUrl(url, logger)) {
       console.log(`Removed RPC URL: ${url}`);
-      
-      // If we removed the default URL, set the last remaining URL as default
-      if (isRemovingDefault) {
-        const remainingUrls = getRpcUrls(logger);
-        if (remainingUrls.length > 0) {
-          const newDefault = remainingUrls[remainingUrls.length - 1];
-          if (setDefaultRpcUrl(newDefault, logger)) {
-            console.log(`Set new default RPC URL: ${newDefault}`);
-          } else {
-            logger.error('Failed to set new default RPC URL');
-          }
-        }
+      let newDefault = getDefaultRpcUrl(logger);
+      // If the default URL has changed after removal, notify the user
+      if (newDefault !== currentDefault) {
+        console.log(`Default URL is now: ${newDefault}`);
       }
     } else {
       console.error('Failed to remove RPC URL');
