@@ -60,15 +60,25 @@ program
   .description('Get the first deployment timestamp of a Solana program')
   .argument('<programId>', 'Solana program ID')
   .option('-v, --verbose', 'Enable verbose logging')
-  .option('-e, --endpoint <endpoint>', 'Custom RPC endpoint URL')
+  .option('-e, --endpoints <endpoints...>', 'Custom RPC endpoint URLs to try in order')
   .action(async (programId, options) => {
     const logger = setupLogger(options.verbose);
     // Validate RPC endpoint if provided
     let endpoints: string[] = [];
-    if (options.endpoint) {
+    if (options.endpoints && options.endpoints.length > 0) {
       try {
-        await validateRpcEndpoint(options.endpoint, logger);
-        endpoints = [options.endpoint, publicRpc];
+        // Validate each provided endpoint
+        for (const endpoint of options.endpoints) {
+          try {
+            await validateRpcEndpoint(endpoint, logger);
+            // Add only validated endpoints to the list
+            endpoints.push(endpoint);
+          } catch (error) {
+            logger.debug(`Endpoint validation failed for ${endpoint}, skipping this endpoint`);
+          }
+        }
+        // Add public RPC as fallback
+        endpoints.push(publicRpc);
       } catch (error) {
         process.exit(1);
       }
