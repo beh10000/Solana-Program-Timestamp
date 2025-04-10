@@ -71,7 +71,7 @@ docker run --rm solana-timestamp get <programId> --endpoints https://api.mainnet
 
 #### Persisting Configuration
 
-To persist RPC endpoint configurations between runs, use the provided `docker-run.sh` script:
+To persist RPC endpoint configurations between runs, use the provided `docker-run.sh` script, which automatically sets up proper permissions:
 
 ```bash
 # Make the script executable
@@ -84,20 +84,44 @@ chmod +x docker-run.sh
 ./docker-run.sh rpc list
 ```
 
-Alternatively, you can manually mount the volume:
+Alternatively, you can use Docker Compose with permission initialization:
 
 ```bash
-# Managing RPC endpoints (requires a volume to persist configuration)
-docker run --rm -v solana-timestamp-config:/home/appuser/.config/solana-timestamp solana-timestamp rpc add https://api.mainnet-beta.solana.com --default
-docker run --rm -v solana-timestamp-config:/home/appuser/.config/solana-timestamp solana-timestamp rpc list
+# First initialize the volume permissions (only needed once)
+docker-compose --profile init up init-volume
+
+# Then add an RPC URL
+ARGS="rpc add https://api.mainnet-beta.solana.com --default" docker-compose up --rm
+
+# Get timestamp for a program
+ARGS="get <programId>" docker-compose up --rm
+```
+
+If you prefer to manually manage Docker volumes, you'll need to ensure proper permissions:
+
+```bash
+# Create the volume
+docker volume create solana-timestamp-config
+
+# Set proper permissions
+docker run --rm -v solana-timestamp-config:/data alpine sh -c "mkdir -p /data/solana-timestamp && chmod -R 777 /data"
+
+# Then run commands with the volume
+docker run --rm -v solana-timestamp-config:/home/appuser/.config solana-timestamp rpc add https://api.mainnet-beta.solana.com --default
+docker run --rm -v solana-timestamp-config:/home/appuser/.config solana-timestamp rpc list
 ```
 
 #### Creating a Shell Alias
 
-For easier use, you can create a shell alias in your `~/.bashrc` or `~/.zshrc`:
+For easier use, you can create a shell alias in your `~/.bashrc` or `~/.zshrc` after setting up the volume permissions:
 
 ```bash
-alias solana-timestamp='docker run --rm -v solana-timestamp-config:/home/appuser/.config/solana-timestamp solana-timestamp'
+# First set up permissions (only needs to be done once)
+docker volume create solana-timestamp-config
+docker run --rm -v solana-timestamp-config:/data alpine sh -c "mkdir -p /data/solana-timestamp && chmod -R 777 /data"
+
+# Then create the alias
+alias solana-timestamp='docker run --rm -v solana-timestamp-config:/home/appuser/.config solana-timestamp'
 ```
 
 After creating this alias (and restarting your shell or running `source ~/.bashrc`), you can use the tool as if it were installed locally:
@@ -105,16 +129,6 @@ After creating this alias (and restarting your shell or running `source ~/.bashr
 ```bash
 solana-timestamp get <programId>
 solana-timestamp rpc list
-```
-
-You can also use Docker Compose:
-
-```bash
-# Add an RPC URL
-ARGS="rpc add https://api.mainnet-beta.solana.com --default" docker-compose up --rm
-
-# Get timestamp for a program
-ARGS="get <programId>" docker-compose up --rm
 ```
 
 ## Usage

@@ -1,11 +1,19 @@
 version: '3'
 
 services:
+  # Service to initialize volume permissions
+  init-volume:
+    image: alpine
+    volumes:
+      - solana-timestamp-config:/data
+    command: sh -c "mkdir -p /data/solana-timestamp && chmod -R 777 /data"
+    profiles: ["init"]
+
   solana-timestamp:
     build: .
     image: solana-timestamp
     volumes:
-      - solana-timestamp-config:/home/appuser/.config/solana-timestamp
+      - solana-timestamp-config:/home/appuser/.config
     # The entrypoint is set in the Dockerfile
     # Pass any arguments from the command line
     command: ${ARGS:-}

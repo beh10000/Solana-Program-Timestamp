@@ -15,5 +15,9 @@ if ! docker volume inspect "$VOLUME_NAME" &> /dev/null; then
     echo "Created Docker volume: $VOLUME_NAME"
 fi
 
+# Create a temp container to set permissions on the volume
+echo "Setting up volume permissions..."
+docker run --rm -v "$VOLUME_NAME:/data" alpine sh -c "mkdir -p /data/solana-timestamp && chmod -R 777 /data"
+
 # Run the container with the volume mounted
-docker run --rm -it -v "$VOLUME_NAME:/home/appuser/.config/solana-timestamp" solana-timestamp "$@" 
+docker run --rm -it -v "$VOLUME_NAME:/home/appuser/.config" solana-timestamp "$@" 
