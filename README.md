@@ -21,6 +21,10 @@ A command-line tool for retrieving the first deployment timestamp of Solana prog
    npm install
    npm run build
    ```
+   Run Tests with
+   ```bash
+   npm test
+   ```
 3. Create an alias for simple calls. Either temporary (current session only):
    ```bash
    alias solana-timestamp='npx ts-node src/index.ts'
