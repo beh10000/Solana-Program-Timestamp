@@ -67,10 +67,29 @@ docker run --rm solana-timestamp get <programId> --verbose
 
 # With custom RPC endpoints
 docker run --rm solana-timestamp get <programId> --endpoints https://api.mainnet-beta.solana.com
+```
 
+#### Persisting Configuration
+
+To persist RPC endpoint configurations between runs, use the provided `docker-run.sh` script:
+
+```bash
+# Make the script executable
+chmod +x docker-run.sh
+
+# Add an RPC endpoint
+./docker-run.sh rpc add https://api.mainnet-beta.solana.com --default
+
+# List configured endpoints
+./docker-run.sh rpc list
+```
+
+Alternatively, you can manually mount the volume:
+
+```bash
 # Managing RPC endpoints (requires a volume to persist configuration)
-docker run --rm -v solana-timestamp-config:/home/appuser/.config solana-timestamp rpc add https://api.mainnet-beta.solana.com --default
-docker run --rm -v solana-timestamp-config:/home/appuser/.config solana-timestamp rpc list
+docker run --rm -v solana-timestamp-config:/home/appuser/.config/solana-timestamp solana-timestamp rpc add https://api.mainnet-beta.solana.com --default
+docker run --rm -v solana-timestamp-config:/home/appuser/.config/solana-timestamp solana-timestamp rpc list
 ```
 
 #### Creating a Shell Alias
@@ -78,19 +97,25 @@ docker run --rm -v solana-timestamp-config:/home/appuser/.config solana-timestam
 For easier use, you can create a shell alias in your `~/.bashrc` or `~/.zshrc`:
 
 ```bash
-alias solana-timestamp='docker run --rm -v solana-timestamp-config:/home/appuser/.config solana-timestamp'
+alias solana-timestamp='docker run --rm -v solana-timestamp-config:/home/appuser/.config/solana-timestamp solana-timestamp'
 ```
-Replace the home/appuser path with your machines path.
 
 After creating this alias (and restarting your shell or running `source ~/.bashrc`), you can use the tool as if it were installed locally:
-NOTE: If building with docker, you may experience trouble with saving RPCs. In this case, simply pass the RPC urls as arguments to the command line tool.
+
 ```bash
 solana-timestamp get <programId>
 solana-timestamp rpc list
 ```
 
+You can also use Docker Compose:
 
+```bash
+# Add an RPC URL
+ARGS="rpc add https://api.mainnet-beta.solana.com --default" docker-compose up --rm
 
+# Get timestamp for a program
+ARGS="get <programId>" docker-compose up --rm
+```
 
 ## Usage
 ### Managing RPC Endpoints
