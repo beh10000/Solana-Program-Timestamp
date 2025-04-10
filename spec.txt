@@ -24,7 +24,34 @@ The primary deliverable is a GitHub repository encompassing all the source code,
 
 A Dockerfile, if you choose to Dockerize the application.
 A comprehensive README.md detailing setup, usage, and system architecture.
-Any tests written for the application
+
+Tests for the application should include:
+
+1. Unit Tests:
+   - Test the parsing of program IDs for validity
+   - Test timestamp extraction logic
+   - Test logger configuration with different verbosity levels
+   - Test error handling for invalid inputs
+
+2. Integration Tests:
+   - Test successful retrieval of timestamps for known program IDs
+   - Test behavior with invalid program IDs
+   - Test custom endpoint configuration
+   - Test fallback mechanisms when primary endpoints fail
+
+3. Error Handling Tests:
+   - Test network timeout scenarios
+   - Test handling of rate limiting from RPC endpoints
+   - Test graceful degradation when all endpoints are unavailable
+
+4. Performance Tests:
+   - Measure response time for retrieving timestamps
+   - Test tool behavior under high load or with multiple concurrent requests
+
+5. CLI Interface Tests:
+   - Test all command-line arguments and options
+   - Test help text and documentation accessibility
+   - Test exit codes for various scenarios (success, errors)
 
 
 Submission

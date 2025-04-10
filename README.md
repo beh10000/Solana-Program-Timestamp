@@ -106,9 +106,10 @@ For easier use, you can create a shell alias in your `~/.bashrc` or `~/.zshrc`:
 ```bash
 alias solana-timestamp='docker run --rm -v solana-timestamp-config:/home/appuser/.config solana-timestamp'
 ```
+Replace the home/appuser path with your machines path.
 
 After creating this alias (and restarting your shell or running `source ~/.bashrc`), you can use the tool as if it were installed locally:
-
+NOTE: If building with docker, you may experience trouble with saving RPCs. In this case, simply pass the RPC urls as arguments to the command line tool.
 ```bash
 solana-timestamp get <programId>
 solana-timestamp rpc list
