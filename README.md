@@ -63,54 +63,7 @@ This design enables reliable interaction with Solana while providing users with 
 
 ## Installation
 
-### Prerequisites
 
-- Node.js (v14 or later)
-- npm or yarn
-
-### Install from npm
-
-```bash
-npm install -g solana-timestamp
-```
-
-Or with yarn:
-
-```bash
-yarn global add solana-timestamp
-```
-
-### Install from source
-
-```bash
-git clone https://github.com/yourusername/solana-timestamp.git
-cd solana-timestamp
-npm install
-npm link
-```
-
-## Usage
-
-### Basic Usage
-
-Get the timestamp of a Solana program:
-
-```bash
-solana-timestamp get <programId>
-```
-
-Example:
-
-```bash
-solana-timestamp get TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
-```
-
-Output:
-```
-1614292795
-```
-
-The output is a Unix timestamp (seconds since epoch).
 
 ### Managing RPC Endpoints
 
@@ -252,16 +205,3 @@ The tool functions by:
 - Verify the RPC endpoints are operational
 - Try increasing the number of retries: `--retries 5`
 
-## License
-
-[MIT](LICENSE)
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
