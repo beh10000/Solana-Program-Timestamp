@@ -22,7 +22,6 @@ The Solana Timestamp CLI employs a modular, service-oriented architecture design
    The application leverages the Commander.js library to implement a clean command pattern architecture. This pattern separates command definition, argument parsing, and execution logic, creating a maintainable command structure with intuitive subcommands.
 
 2. **Service-Oriented Design**  
-   The tool follows a service-oriented approach with clear separation of concerns:
    * **Command Handlers**: Encapsulated logic for specific functions (getTimestamp, RPC management)
    * **Utility Services**: Configuration management, logging, validation
    * **RPC Interaction Layer**: Abstracted communication with blockchain nodes
@@ -30,17 +29,16 @@ The Solana Timestamp CLI employs a modular, service-oriented architecture design
 3. **Fault-Tolerant RPC Management**  
    A simple and robust endpoint management system with:
    * Multiple endpoint support with automatic failover to handle transient RPC failures that may occur with free-tier RPC endpoints
-   * Persistent configuration storage and on-the-fly RPC endpoint input
+   * Persistent configuration storage of RPC endpoints and on-the-fly RPC endpoint input
    * Endpoint validation and health checking
-   * Default endpoint designation
+   * Default endpoint fallback
 
 4. **Resilient Data Retrieval System**  
-   The timestamp retrieval logic employs:
+   A RPC endpoint request scheme that manages potentially large amounts of transactions to parse via:
    * Backward pagination through transaction history
-   * Configurable retry mechanisms with exponential backoff
+   * Configurable retry mechanisms with exponential backoff to mitigate rate limit faiuires
    * Explicit error handling with informative messaging
    * Transaction signature processing for determining program deployment time
-   * NOTE: A more efficient way of doing this would be to lean into subgraph indexing APIs to retrieve deployment signatures instead of backwards search. 
 
 5. **Logging Infrastructure**  
    Structured logging via Pino with:
