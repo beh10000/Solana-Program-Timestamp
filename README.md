@@ -63,6 +63,59 @@ This design enables reliable interaction with Solana while providing users with 
 
 ## Installation
 
+### Using Docker
+
+You can run the Solana Timestamp CLI using Docker without installing Node.js or npm on your system.
+
+#### Building the Docker Image
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/beh10000/Solana-Program-Timestamp.git
+   cd Solana-Program-Timestamp
+   ```
+
+2. Build the Docker image:
+   ```bash
+   docker build -t solana-timestamp .
+   ```
+
+#### Using the Docker Image
+
+Run commands using the Docker image:
+
+```bash
+# Basic usage
+docker run --rm solana-timestamp get <programId>
+
+# With verbose logging
+docker run --rm solana-timestamp get <programId> --verbose
+
+# With custom RPC endpoints
+docker run --rm solana-timestamp get <programId> --endpoints https://api.mainnet-beta.solana.com
+
+# Managing RPC endpoints (requires a volume to persist configuration)
+docker run --rm -v solana-timestamp-config:/home/appuser/.config solana-timestamp rpc add https://api.mainnet-beta.solana.com --default
+docker run --rm -v solana-timestamp-config:/home/appuser/.config solana-timestamp rpc list
+```
+
+#### Creating a Shell Alias
+
+For easier use, you can create a shell alias in your `~/.bashrc` or `~/.zshrc`:
+
+```bash
+alias solana-timestamp='docker run --rm -v solana-timestamp-config:/home/appuser/.config solana-timestamp'
+```
+
+After creating this alias (and restarting your shell or running `source ~/.bashrc`), you can use the tool as if it were installed locally:
+
+```bash
+solana-timestamp get <programId>
+solana-timestamp rpc list
+```
+
+### Using npm (Local Installation)
+
 
 
 ### Managing RPC Endpoints

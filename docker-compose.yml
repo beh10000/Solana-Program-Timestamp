@@ -1,0 +1,15 @@
+version: '3'
+
+services:
+  solana-timestamp:
+    build: .
+    image: solana-timestamp
+    volumes:
+      - solana-timestamp-config:/home/appuser/.config
+    # The entrypoint is set in the Dockerfile
+    # Pass any arguments from the command line
+    command: ${ARGS:-}
+    # To run: ARGS="get <programId>" docker-compose up
+
+volumes:
+  solana-timestamp-config: 
