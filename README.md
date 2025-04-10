@@ -63,6 +63,27 @@ This design enables reliable interaction with Solana while providing users with 
 
 ## Installation
 
+### Using npm
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/beh10000/Solana-Program-Timestamp.git
+   cd Solana-Program-Timestamp
+   ```
+2. ```bash
+   npm install
+   npm run build
+   ```
+3. Create an alias for simple calls. Either temporary (current session only):
+   ```bash
+   alias solana-timestamp='npx ts-node src/index.ts'
+   ```
+   or permanent:
+   ```bash
+   echo 'alias solana-timestamp="npx ts-node src/index.ts"' >> ~/.bashrc
+   source ~/.bashrc  
+   ```
+4.
+
 ### Using Docker
 
 You can run the Solana Timestamp CLI using Docker without installing Node.js or npm on your system.
@@ -115,10 +136,10 @@ solana-timestamp get <programId>
 solana-timestamp rpc list
 ```
 
-### Using npm (Local Installation)
 
 
 
+## Usage
 ### Managing RPC Endpoints
 
 Add an RPC endpoint:
