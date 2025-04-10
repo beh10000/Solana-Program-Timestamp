@@ -10,9 +10,11 @@ import {
   getDefaultRpcUrl,
   setDefaultRpcUrl
 } from './utils/config';
+import { validateRpcEndpoint, validateRpcEndpoints } from './utils/rpcValidator';
 import fetch from 'node-fetch';
 import pino from 'pino';
 import { performance } from 'perf_hooks';
+import { resolveEndpoints } from './utils/endpointResolver';
 
 const program = new Command();
 
@@ -31,62 +33,11 @@ program
   .option('-d, --retry-delay <number>', 'Delay in milliseconds between retry attempts (default: 1000)')
   .action(async (programId, options) => {
     const logger = setupLogger(options.verbose);
-    let endpoints: string[] = [];
-    // If endpoints are passed as arguments in the command line, only use these if valid URLs.
-    if (options.endpoints && options.endpoints.length > 0) {
-      try {
-        // Validate each provided endpoint
-        for (const endpoint of options.endpoints) {
-          try {
-            await validateRpcEndpoint(endpoint, logger);
-            // Add only validated endpoints to the list
-            endpoints.push(endpoint);
-          } catch (error) {
-            logger.debug(`Endpoint validation failed for ${endpoint}, skipping this endpoint`);
-          }
-        }
-        // If after validation, no endpoints are left, exit
-        if (endpoints.length === 0) {
-            logger.error('No valid RPC endpoints provided.');
-            console.error('Error: No valid RPC endpoints were provided via the --endpoints flag.');
-            process.exit(1);
-        }
-      } catch (error) {
-        process.exit(1);
-      }
     
-    } 
-    // If no endpoints are passed as arguments, check for pre-configured RPC urls.
-    else {
-      // Try to get the default RPC endpoint from config
-      const defaultRpcUrl = getDefaultRpcUrl(logger);
-      const configuredUrls = getRpcUrls(logger);
-
-      if (defaultRpcUrl) {
-        // Use default and other configured URLs
-        endpoints = [defaultRpcUrl, ...configuredUrls.filter(url => url !== defaultRpcUrl)];
-        logger.debug(`Using configured RPC endpoints starting with default: ${defaultRpcUrl}`);
-      } else if (configuredUrls.length > 0) {
-        // Use other configured URLs if no default is set for some reason.
-        endpoints = configuredUrls;
-        logger.debug(`Using configured RPC endpoints. No default set.`);
-      } else {
-        // No endpoints provided and none configured, inform user and exit
-        logger.error('No RPC endpoint provided and no endpoints configured.');
-        console.error('Error: No RPC endpoint specified.');
-        console.error('Please provide an endpoint using the --endpoints flag or configure one using "rpc add <url>".');
-        process.exit(1);
-      }
-    }
-
-    // Ensure endpoints are not empty before proceeding (should be covered above, but as a safeguard)
-    if (endpoints.length === 0) {
-        logger.error('No RPC endpoints available to use.');
-        console.error('Error: Could not determine an RPC endpoint to use.');
-        process.exit(1);
-    }
-
     try {
+      // Resolve and validate endpoints
+      const endpoints = await resolveEndpoints(options, logger);
+      
       const timestamp = await getTimestamp(programId, endpoints, {
         verbose: options.verbose,
         logger
@@ -195,37 +146,6 @@ rpcCommand
 if (require.main === module) {
   program.parse();
 }
-/**
- * Validates a Solana RPC endpoint by making a test request
- * @param url The RPC endpoint URL to validate
- * @param logger Logger instance
- * @returns A promise that resolves if the endpoint is valid
- */
-async function validateRpcEndpoint(url: string, logger: pino.Logger): Promise<void> {
-    logger.debug(`Validating RPC endpoint: ${url}`);
-    
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'getVersion'
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      logger.debug(`Successfully connected to RPC endpoint. Response: ${JSON.stringify(data)}`);
-    } catch (error) {
-      logger.error({ error }, `Invalid RPC endpoint: ${url}`);
-      throw error;
-    }
-  }
+
+// Export the validateRpcEndpoint function for testing purposes
 export { validateRpcEndpoint }; 

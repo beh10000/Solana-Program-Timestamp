@@ -1,18 +1,13 @@
 # Solana Timestamp CLI
 
-A command-line tool for retrieving the first deployment timestamp of Solana programs.
-
-## Overview
-
-This tool queries Solana RPC nodes to find the earliest transaction involving a specified program ID, allowing you to determine when a program was first deployed to the Solana blockchain.
+A command-line tool for retrieving the first deployment timestamp of Solana programs. Useful for both human users and integration into automated systems.
 
 ## Features
 
 - Retrieve the first deployment timestamp of any Solana program
-- Manage multiple RPC endpoints with fallback capability
+- Simple and powerful RPC endpoint management allowing pre-saved RPCs or command line input RPCs
 - Configurable retry mechanisms for handling transient RPC failures
 - Configurable logging levels for debugging
-
 
 ## Installation
 
@@ -59,26 +54,19 @@ You can run the Solana Timestamp CLI using Docker without installing Node.js or 
 Run commands using the Docker image:
 
 ```bash
-# Basic usage
-docker run --rm solana-timestamp get <programId>
 
-# With verbose logging
-docker run --rm solana-timestamp get <programId> --verbose
-
-# With custom RPC endpoints
-docker run --rm solana-timestamp get <programId> --endpoints https://api.mainnet-beta.solana.com
+docker run --rm solana-timestamp get <programId> --endpoints <rpcEndpoint> --verbose
 ```
-
+Quicknode and Helius have free, reliable RPC urls with reasonable rate limits and request allowances. NOTE: Helius endpoint has a "?" in it which may trip up the command line so if the endpoint has interfering characters pass it in quotes as a string.
 #### Persisting Configuration
-
-To persist RPC endpoint configurations between runs, use the provided `docker-run.sh` script, which automatically sets up proper permissions:
+This tool enables users to save RPC urls so that they do not have to be passed in every command line call. To persist RPC endpoint configurations between runs, use the provided `docker-run.sh` script, which automatically sets up proper permissions:
 
 ```bash
 # Make the script executable
 chmod +x docker-run.sh
 
 # Add an RPC endpoint
-./docker-run.sh rpc add https://api.mainnet-beta.solana.com --default
+./docker-run.sh rpc add <rpcEndpoint> --default
 
 # List configured endpoints
 ./docker-run.sh rpc list
@@ -91,7 +79,7 @@ Alternatively, you can use Docker Compose with permission initialization:
 docker-compose --profile init up init-volume
 
 # Then add an RPC URL
-ARGS="rpc add https://api.mainnet-beta.solana.com --default" docker-compose up --rm
+ARGS="rpc add <rpcEndpointUrl> --default" docker-compose up --rm
 
 # Get timestamp for a program
 ARGS="get <programId>" docker-compose up --rm
@@ -107,7 +95,7 @@ docker volume create solana-timestamp-config
 docker run --rm -v solana-timestamp-config:/data alpine sh -c "mkdir -p /data/solana-timestamp && chmod -R 777 /data"
 
 # Then run commands with the volume
-docker run --rm -v solana-timestamp-config:/home/appuser/.config solana-timestamp rpc add https://api.mainnet-beta.solana.com --default
+docker run --rm -v solana-timestamp-config:/home/appuser/.config solana-timestamp rpc add <rpcEndpointUrl> --default
 docker run --rm -v solana-timestamp-config:/home/appuser/.config solana-timestamp rpc list
 ```
 
@@ -137,13 +125,13 @@ Note: Public RPC urls shown in the example below may have rate limits or other i
 Add an RPC endpoint:
 
 ```bash
-solana-timestamp rpc add https://api.mainnet-beta.solana.com
+solana-timestamp rpc add <rpcEndpointUrl>
 ```
 
 Set as default:
 
 ```bash
-solana-timestamp rpc add https://api.mainnet-beta.solana.com --default
+solana-timestamp rpc add <rpcEndpointUrl> --default
 ```
 
 List configured endpoints:
@@ -155,13 +143,13 @@ solana-timestamp rpc list
 Remove an endpoint:
 
 ```bash
-solana-timestamp rpc remove https://api.mainnet-beta.solana.com
+solana-timestamp rpc remove <rpcEndpointUrl>
 ```
 
 Set an existing endpoint as default:
 
 ```bash
-solana-timestamp rpc set-default https://api.mainnet-beta.solana.com
+solana-timestamp rpc set-default <rpcEndpointUrl>
 ```
 
 ### Advanced Options
@@ -179,7 +167,7 @@ solana-timestamp get <programId> --verbose
 Use specific RPC endpoints for a single command:
 
 ```bash
-solana-timestamp get <programId> --endpoints https://api.mainnet-beta.solana.com https://solana-api.projectserum.com
+solana-timestamp get <programId> --endpoints <rpcEndpointUrl1> <rpcEndpointUrl1> 
 ```
 
 This will try the endpoints in order, falling back to the next one if an endpoint fails.
@@ -269,7 +257,6 @@ The Solana Timestamp CLI employs a modular, service-oriented architecture design
    * Backward pagination through transaction history
    * Configurable retry mechanisms with exponential backoff to mitigate rate limit faiuires
    * Explicit error handling with informative messaging
-   * Transaction signature processing for determining program deployment time
 
 5. **Logging Infrastructure**  
    Structured logging via Pino with:
@@ -280,7 +267,7 @@ The Solana Timestamp CLI employs a modular, service-oriented architecture design
 
 ### Performance Considerations
 
-It was determined that the most feasible way to retrieve the deployment timestamp using only the RPC HTTP endpoints was to work backwards through a paginated list of transaction signatures to find the earliest on for the target program ID. This is not particularly efficient, but a different solution could not be found so far. An alternative solution if using external hosted API's is acceptable for your particular use case is to query indexed subgraph APIs to retrieve the first available signature. 
+It was determined that the most feasible way to retrieve the deployment timestamp using only the RPC HTTP endpoints was to work backwards through a paginated list of transaction signatures to find the earliest on for the target program ID. This is not particularly efficient, but a different solution could not be found so far. An alternative solution if using external hosted API's is acceptable for your particular use case is to query indexed subgraph APIs to retrieve the first indexed signature. 
 
 
 ### Extensibility
@@ -290,13 +277,13 @@ The architecture facilitates easy extension through:
 * Abstracted RPC interaction layer
 * Clear interfaces between components
 
-This design enables reliable interaction with Solana while providing users with flexibility in how they connect to the network, making it suitable for both individual users and integration into larger systems.
+This design enables reliable interaction with Solana while providing users with flexibility in how they use this tool, making it suitable for both individual users manually using it in the terminal or integration into larger systems.
 
 ## How It Works
 
 The tool functions by:
 
-1. Validating the provided program ID
+1. Validating the provided program ID and RPC endpoints
 2. Connecting to Solana RPC nodes
 3. Fetching transaction signatures associated with the program ID
 4. Paginating backward through the transaction history
@@ -316,6 +303,6 @@ The tool functions by:
 
 **Error: Failed to get timestamp using all configured RPC URLs**
 - Check your internet connection
-- Verify the RPC endpoints are operational
+- Verify the RPC endpoints are operational and you have not reached your request limit.
 - Try increasing the number of retries: `--retries 5`
 
