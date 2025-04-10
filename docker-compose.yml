@@ -5,7 +5,7 @@ services:
     build: .
     image: solana-timestamp
     volumes:
-      - solana-timestamp-config:/home/appuser/.config
+      - solana-timestamp-config:/home/appuser/.config/solana-timestamp
     # The entrypoint is set in the Dockerfile
     # Pass any arguments from the command line
     command: ${ARGS:-}

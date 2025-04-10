@@ -16,4 +16,4 @@ if ! docker volume inspect "$VOLUME_NAME" &> /dev/null; then
 fi
 
 # Run the container with the volume mounted
-docker run --rm -it -v "$VOLUME_NAME:/home/appuser/.config" solana-timestamp "$@" 
+docker run --rm -it -v "$VOLUME_NAME:/home/appuser/.config/solana-timestamp" solana-timestamp "$@" 

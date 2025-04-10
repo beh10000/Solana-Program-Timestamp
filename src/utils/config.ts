@@ -8,7 +8,26 @@ interface ConfigData {
   defaultRpcUrl?: string;
 }
 
-const CONFIG_DIR = path.join(os.homedir(), '.solana-timestamp');
+// Allow configuration of the config directory through environment variables
+// This makes it flexible for both Docker and local usage
+const getConfigDir = (): string => {
+  // If CONFIG_DIR environment variable is set, use it
+  if (process.env.SOLANA_TIMESTAMP_CONFIG_DIR) {
+    return process.env.SOLANA_TIMESTAMP_CONFIG_DIR;
+  }
+  
+  // Check for a Docker environment
+  // In Docker, home directory is /home/appuser and we mount at /home/appuser/.config
+  const isDocker = fs.existsSync('/.dockerenv') || process.env.RUNNING_IN_DOCKER === 'true';
+  if (isDocker) {
+    return path.join(os.homedir(), '.config', 'solana-timestamp');
+  }
+  
+  // Default path for local npm installations
+  return path.join(os.homedir(), '.solana-timestamp');
+};
+
+const CONFIG_DIR = getConfigDir();
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 // Ensure config directory exists

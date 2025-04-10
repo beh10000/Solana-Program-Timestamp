@@ -37,5 +37,8 @@ RUN chmod +x ./dist/index.js
 RUN addgroup -S appuser && adduser -S appuser -G appuser
 USER appuser
 
+# Set environment variable to indicate Docker environment
+ENV RUNNING_IN_DOCKER=true
+
 # Set the binary as entrypoint
 ENTRYPOINT ["node", "dist/index.js"] 

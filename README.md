@@ -13,53 +13,6 @@ This tool queries Solana RPC nodes to find the earliest transaction involving a 
 - Configurable retry mechanisms for handling transient RPC failures
 - Configurable logging levels for debugging
 
-## Solana Timestamp CLI: Architectural Overview
-
-The Solana Timestamp CLI employs a modular, service-oriented architecture designed for reliability and extensibility. 
-### Core Architecture Components
-
-1. **Command Pattern Implementation**  
-   The application leverages the Commander.js library to implement a clean command pattern architecture. This pattern separates command definition, argument parsing, and execution logic, creating a maintainable command structure with intuitive subcommands.
-
-2. **Service-Oriented Design**  
-   * **Command Handlers**: Encapsulated logic for specific functions (getTimestamp, RPC management)
-   * **Utility Services**: Configuration management, logging, validation
-   * **RPC Interaction Layer**: Abstracted communication with blockchain nodes
-
-3. **Fault-Tolerant RPC Management**  
-   A simple and robust endpoint management system with:
-   * Multiple endpoint support with automatic failover to handle transient RPC failures that may occur with free-tier RPC endpoints
-   * Persistent configuration storage of RPC endpoints and on-the-fly RPC endpoint input
-   * Endpoint validation and health checking
-   * Default endpoint fallback
-
-4. **Resilient Data Retrieval System**  
-   A RPC endpoint request scheme that manages potentially large amounts of transactions to parse via:
-   * Backward pagination through transaction history
-   * Configurable retry mechanisms with exponential backoff to mitigate rate limit faiuires
-   * Explicit error handling with informative messaging
-   * Transaction signature processing for determining program deployment time
-
-5. **Logging Infrastructure**  
-   Structured logging via Pino with:
-   * Verbosity option
-   * Context-rich log entries and error messages
-
-
-
-### Performance Considerations
-
-It was determined that the only feasible way to retrieve the deployment timestamp using only the RPC HTTP endpoints was to work backwards through a paginated list of transaction signatures to find the earliest on for the target program ID. This is not particularly efficient, but a different solution could not be found so far. An alternative solution if using external hosted API's is acceptable for your particular use case is to query indexed subgraph APIs to retrieve the first available signature. 
-
-
-### Extensibility
-
-The architecture facilitates easy extension through:
-* Modular command structure for adding new capabilities
-* Abstracted RPC interaction layer
-* Clear interfaces between components
-
-This design enables reliable interaction with Solana while providing users with flexibility in how they connect to the network, making it suitable for both individual users and integration into larger systems.
 
 ## Installation
 
@@ -82,9 +35,9 @@ This design enables reliable interaction with Solana while providing users with 
    echo 'alias solana-timestamp="npx ts-node src/index.ts"' >> ~/.bashrc
    source ~/.bashrc  
    ```
-4.
 
-### Using Docker
+
+### Alternative: Using Docker
 
 You can run the Solana Timestamp CLI using Docker without installing Node.js or npm on your system.
 
@@ -141,7 +94,7 @@ solana-timestamp rpc list
 
 ## Usage
 ### Managing RPC Endpoints
-
+Note: Public RPC urls shown in the example below may have rate limits or other issues. Consider Quicknode or Helius for free RPC urls.
 Add an RPC endpoint:
 
 ```bash
@@ -252,6 +205,53 @@ solana-timestamp rpc set-default <url> [options]
 
 Options:
 - `-v, --verbose` - Enable verbose logging
+## Solana Timestamp CLI: Architectural Overview
+
+The Solana Timestamp CLI employs a modular, service-oriented architecture designed for reliability and extensibility. 
+### Core Architecture Components
+
+1. **Command Pattern Implementation**  
+   The application leverages the Commander.js library to implement a clean command pattern architecture. This pattern separates command definition, argument parsing, and execution logic, creating a maintainable command structure with intuitive subcommands.
+
+2. **Service-Oriented Design**  
+   * **Command Handlers**: Encapsulated logic for specific functions (getTimestamp, RPC management)
+   * **Utility Services**: Configuration management, logging, validation
+   * **RPC Interaction Layer**: Abstracted communication with blockchain nodes
+
+3. **Fault-Tolerant RPC Management**  
+   A simple and robust endpoint management system with:
+   * Multiple endpoint support with automatic failover to handle transient RPC failures that may occur with free-tier RPC endpoints
+   * Persistent configuration storage of RPC endpoints and on-the-fly RPC endpoint input
+   * Endpoint validation and health checking
+   * Default endpoint fallback
+
+4. **Resilient Data Retrieval System**  
+   A RPC endpoint request scheme that manages potentially large amounts of transactions to parse via:
+   * Backward pagination through transaction history
+   * Configurable retry mechanisms with exponential backoff to mitigate rate limit faiuires
+   * Explicit error handling with informative messaging
+   * Transaction signature processing for determining program deployment time
+
+5. **Logging Infrastructure**  
+   Structured logging via Pino with:
+   * Verbosity option
+   * Context-rich log entries and error messages
+
+
+
+### Performance Considerations
+
+It was determined that the most feasible way to retrieve the deployment timestamp using only the RPC HTTP endpoints was to work backwards through a paginated list of transaction signatures to find the earliest on for the target program ID. This is not particularly efficient, but a different solution could not be found so far. An alternative solution if using external hosted API's is acceptable for your particular use case is to query indexed subgraph APIs to retrieve the first available signature. 
+
+
+### Extensibility
+
+The architecture facilitates easy extension through:
+* Modular command structure for adding new capabilities
+* Abstracted RPC interaction layer
+* Clear interfaces between components
+
+This design enables reliable interaction with Solana while providing users with flexibility in how they connect to the network, making it suitable for both individual users and integration into larger systems.
 
 ## How It Works
 
