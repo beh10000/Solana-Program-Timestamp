@@ -26,11 +26,13 @@ program
   .description('Get the first deployment timestamp of a Solana program')
   .argument('<programId>', 'Solana program ID')
   .option('-v, --verbose', 'Enable verbose logging')
-  .option('-e, --endpoints <endpoints...>', 'Custom RPC endpoint URLs to try in order')
+  .option('-e, --endpoints <endpoints...>', 'Custom RPC endpoint URLs to try in order, if one fails more than 5 times in a row it falls back to the next URL in line.')
+  .option('-r, --retries <number>', 'Number of retry attempts for RPC calls (default: 3)')
+  .option('-d, --retry-delay <number>', 'Delay in milliseconds between retry attempts (default: 1000)')
   .action(async (programId, options) => {
     const logger = setupLogger(options.verbose);
     let endpoints: string[] = [];
-
+    // If endpoints are passed as arguments in the command line, only use these if valid URLs.
     if (options.endpoints && options.endpoints.length > 0) {
       try {
         // Validate each provided endpoint
@@ -49,13 +51,13 @@ program
             console.error('Error: No valid RPC endpoints were provided via the --endpoints flag.');
             process.exit(1);
         }
-        // Do not add public RPC as fallback anymore
-        // endpoints.push(publicRpc);
       } catch (error) {
-        // Error during validation loop already handled, exit if needed
         process.exit(1);
       }
-    } else {
+    
+    } 
+    // If no endpoints are passed as arguments, check for pre-configured RPC urls.
+    else {
       // Try to get the default RPC endpoint from config
       const defaultRpcUrl = getDefaultRpcUrl(logger);
       const configuredUrls = getRpcUrls(logger);
@@ -65,7 +67,7 @@ program
         endpoints = [defaultRpcUrl, ...configuredUrls.filter(url => url !== defaultRpcUrl)];
         logger.debug(`Using configured RPC endpoints starting with default: ${defaultRpcUrl}`);
       } else if (configuredUrls.length > 0) {
-        // Use other configured URLs if no default is set
+        // Use other configured URLs if no default is set for some reason.
         endpoints = configuredUrls;
         logger.debug(`Using configured RPC endpoints. No default set.`);
       } else {
@@ -84,16 +86,12 @@ program
         process.exit(1);
     }
 
-    // Start timing
-    console.time('getTimestamp execution');
     try {
       const timestamp = await getTimestamp(programId, endpoints, {
         verbose: options.verbose,
         logger
       });
-      // End timing on success
-      console.timeEnd('getTimestamp execution');
-
+      
       console.log(timestamp);
     } catch (error) {
       // End timing on error
@@ -227,8 +225,6 @@ async function validateRpcEndpoint(url: string, logger: pino.Logger): Promise<vo
       logger.debug(`Successfully connected to RPC endpoint. Response: ${JSON.stringify(data)}`);
     } catch (error) {
       logger.error({ error }, `Invalid RPC endpoint: ${url}`);
-      console.error(`Failed to validate RPC endpoint: ${url}`);
-      console.error('Please provide a valid Solana RPC URL');
       throw error;
     }
   }

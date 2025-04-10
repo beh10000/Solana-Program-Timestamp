@@ -12,42 +12,12 @@ export interface GetTimestampOptions {
   retryDelay?: number;
 }
 
-/**
- * Helper function to retry asynchronous operations.
- */
-async function retryOperation<T>(
-    operation: () => Promise<T>,
-    maxRetries: number,
-    delayMs: number,
-    logger: Logger,
-    operationName: string = 'Operation'
-): Promise<T> {
-    let attempts = 0;
-    while (attempts < maxRetries) {
-        try {
-            return await operation();
-        } catch (error) {
-            attempts++;
-            const isLastAttempt = attempts >= maxRetries;
-            const level = isLastAttempt ? 'error' : 'warn';
-            logger[level](
-                { error },
-                `${operationName} attempt ${attempts} failed.${isLastAttempt ? ` No more retries.` : ` Retrying in ${delayMs}ms...`}`
-            );
-            if (isLastAttempt) {
-                throw error;
-            }
-            await new Promise(resolve => setTimeout(resolve, delayMs));
-        }
-    }
-    throw new Error(`${operationName} failed after ${maxRetries} attempts.`);
-}
 
 export async function getTimestamp(
   programId: string,
   endpoints: string[],
   options?: GetTimestampOptions
-): Promise<string> {
+): Promise<number> {
   const logger = options?.logger || setupLogger(options?.verbose || false);
   let lastError: Error | null = null;
   const maxRetries = options?.retries ?? 3;
@@ -64,15 +34,17 @@ export async function getTimestamp(
       }
       logger.debug(`Program ID validation passed: ${programId}`);
 
-      const timestamp = await requestTimestamp(
-          connection,
-          programId,
-          logger,
-          maxRetries,
-          retryDelay
-      );
+      
+      const firstBlockTime = await findFirstBlockTimestamp(connection, programId, logger, maxRetries, retryDelay);
 
-      return timestamp.toString();
+      if (firstBlockTime === null) {
+        logger.error(`Could not determine a valid block timestamp for program: ${programId}.`);
+        throw new Error(`Could not determine deployment timestamp for program: ${programId}`);
+      }
+
+      const timestamp = firstBlockTime;
+
+      return timestamp;
     } catch (error) {
       logger?.warn({ error, rpcUrl }, 'Failed to get timestamp from RPC URL');
       lastError = error as Error;
@@ -83,18 +55,40 @@ export async function getTimestamp(
 }
 
 /**
- * Finds the signature of the first transaction involving the given address.
- * Iterates backwards through transaction history using getSignaturesForAddress.
+ * Finds the earliest block timestamp for a Solana program by iteratively fetching transaction signatures
+ * and examining their block times.
+ * 
+ * This function works by:
+ * 1. Starting with the most recent transactions
+ * 2. Paginating backward through transaction history using the 'before' parameter
+ * 3. Continuing until either:
+ *    - No more signatures are found (reached beginning of history)
+ *    - A batch with fewer than the requested limit is returned (last page)
+ * 
+ * The function uses retry logic to handle temporary RPC failures.
+ * 
+ * @param connection - The Solana connection object to use for RPC calls
+ * @param programIdStr - The program ID as a string to search for transactions
+ * @param logger - Logger instance for debug and error information
+ * @param maxRetries - Maximum number of retry attempts for failed RPC calls
+ * @param retryDelayMs - Delay in milliseconds between retry attempts
+ * 
+ * @returns A Promise that resolves to:
+ *   - The earliest block timestamp (in seconds) if found
+ *   - null if no transactions with timestamps were found
+ * 
+ * @throws Will propagate errors from the RPC connection after retry attempts are exhausted
  */
-async function findFirstSignature(
+async function findFirstBlockTimestamp(
     connection: Connection,
     programIdStr: string,
     logger: Logger,
     maxRetries: number,
     retryDelayMs: number
-): Promise<string | null> {
+): Promise<number | null> {
     let oldestSignature: string | null = null;
     let currentBeforeSignature: string | undefined = undefined;
+    let firstTimestamp: number | null = null;
     const limit = 1000;
     const programId = new PublicKey(programIdStr);
     const operationName = `getSignaturesForAddress(${programIdStr})`;
@@ -136,78 +130,28 @@ async function findFirstSignature(
 
         if (signaturesInfo.length < limit) {
             logger.debug('Received less than limit, assuming this is the last page.');
+            if (typeof oldestInBatch.blockTime === 'number') {
+                firstTimestamp = oldestInBatch.blockTime;
+            } else {
+                logger.warn(`Oldest transaction found (${oldestSignature}) has no blockTime. Timestamp may be inaccurate.`);
+            }
             break;
+        }
+        if (typeof oldestInBatch.blockTime === 'number') {
+            firstTimestamp = oldestInBatch.blockTime;
         }
     }
 
-    if (oldestSignature) {
-        logger.info(`Found the potentially oldest signature for ${programIdStr}: ${oldestSignature}`);
+    if (firstTimestamp !== null) {
+        logger.debug(`Found the potentially earliest block timestamp for ${programIdStr}: ${firstTimestamp} (from signature ${oldestSignature})`);
     } else {
-        logger.warn(`Could not find any signatures for ${programIdStr}. The program might be unused or very new.`);
+        logger.warn(`Could not determine a block timestamp for ${programIdStr}. The program might be unused or transactions lack blockTime data.`);
     }
 
-    return oldestSignature;
+    return firstTimestamp;
 }
 
-/**
- * Requests the deployment timestamp for a Solana program by finding its first transaction signature.
- *
- * @param connection The Solana connection object
- * @param programId The program ID to get the timestamp for
- * @param logger Logger instance for debugging
- * @param maxRetries Max number of retries for RPC calls
- * @param retryDelayMs Delay between retries in milliseconds
- * @returns The timestamp (in milliseconds) of the first transaction, or throws an error.
- */
-async function requestTimestamp(
-  connection: Connection,
-  programId: string,
-  logger: Logger,
-  maxRetries: number,
-  retryDelayMs: number
-): Promise<number> {
-  logger.debug(`Attempting to find the first signature for program: ${programId}`);
 
-  try {
-    const firstSignature = await findFirstSignature(connection, programId, logger, maxRetries, retryDelayMs);
-
-    if (!firstSignature) {
-      logger.error(`No transaction signatures found for program: ${programId}. Cannot determine deployment time.`);
-      throw new Error(`No transaction signatures found for program: ${programId}`);
-    }
-
-    const operationName = `getParsedTransaction(${firstSignature})`;
-    logger.debug(`Fetching transaction details for signature: ${firstSignature}`);
-
-    const txDetails = await retryOperation(
-        () => connection.getParsedTransaction(firstSignature, { maxSupportedTransactionVersion: 0 }),
-        maxRetries,
-        retryDelayMs,
-        logger,
-        operationName
-    );
-
-    if (!txDetails) {
-         logger.error(`Failed to retrieve transaction details for signature: ${firstSignature} after retries.`);
-         throw new Error(`Failed to retrieve transaction details for signature: ${firstSignature}`);
-    }
-
-    if (typeof txDetails.blockTime !== 'number') {
-        logger.error(`Could not retrieve valid blockTime for signature: ${firstSignature}. Transaction details: ${JSON.stringify(txDetails)}`);
-        throw new Error(`Could not retrieve valid blockTime for signature: ${firstSignature}`);
-    }
-
-    const timestamp = txDetails.blockTime * 1000;
-    logger.info(`Deployment timestamp determined from first transaction ${firstSignature}: ${timestamp}`);
-    logger.info(`Human-readable time (first transaction): ${new Date(timestamp).toLocaleString()}`);
-    return timestamp;
-
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error({ error }, `Error determining deployment timestamp for ${programId}: ${errorMessage}`);
-    throw new Error(`Failed to determine deployment timestamp for ${programId}: ${errorMessage}`);
-  }
-}
 
 /**
  * Validates if a string is a valid Solana program ID
@@ -219,22 +163,47 @@ export function isValidProgramId(programId: string): boolean {
   if (!programId || typeof programId !== 'string') {
     return false;
   }
-
   const base58Regex = /^[1-9A-HJ-NP-Za-km-z]+$/;
-  
   if (!base58Regex.test(programId)) {
     return false;
   }
-  
   try {
     const decoded = bs58.decode(programId);
-    
     if (decoded.length !== 32) {
       return false;
     }
   } catch (error) {
     return false;
   }
-  
   return true;
 }
+/**
+ * Helper function to retry asynchronous operations. Useful for re-attempting rpc http requests when they fail for no clear reason.
+ */
+async function retryOperation<T>(
+    operation: () => Promise<T>,
+    maxRetries: number,
+    delayMs: number,
+    logger: Logger,
+    operationName: string = 'Operation'
+    ): Promise<T> {
+        let attempts = 0;
+        while (attempts < maxRetries) {
+            try {
+                return await operation();
+            } catch (error) {
+                attempts++;
+                const isLastAttempt = attempts >= maxRetries;
+                const level = isLastAttempt ? 'error' : 'warn';
+                logger[level](
+                    { error },
+                    `${operationName} attempt ${attempts} failed.${isLastAttempt ? ` No more retries.` : ` Retrying in ${delayMs}ms...`}`
+                );
+                if (isLastAttempt) {
+                    throw error;
+                }
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+        }
+        throw new Error(`${operationName} failed after ${maxRetries} attempts.`);
+        }

@@ -1,6 +1,10 @@
 import { jest } from '@jest/globals';
 import * as config from '../../src/utils/config';
 import fetch from 'node-fetch';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 // Mock the config module and fetch
 jest.mock('../../src/utils/config');
@@ -13,7 +17,8 @@ const mockedConfig = config as jest.Mocked<typeof config>;
 const mockedFetch = fetch as jest.MockedFunction<typeof fetch>;
 
 describe('RPC URL Management', () => {
-  const validRpcUrl = 'https://mainnet.helius-rpc.com/?api-key=5796e52e-3f1a-4f3e-ac06-75ac9803166e';
+  // Use environment variable or fallback to a test value
+  const validRpcUrl = process.env.TEST_RPC_URL || 'https://example-test-rpc.com';
   const invalidRpcUrl = 'https://invalid.rpc.url';
   const logger = { debug: jest.fn(), error: jest.fn() } as any;
   
@@ -36,9 +41,7 @@ describe('RPC URL Management', () => {
 
   describe('addRpcUrl function', () => {
     it('should add a valid RPC URL', async () => {
-      console.log('Step 1: Validating RPC endpoint...');
       await validateRpcEndpoint(validRpcUrl, logger);
-      console.log('Step 2: Checking if fetch was called with correct parameters');
       expect(mockedFetch).toHaveBeenCalledWith(
         validRpcUrl,
         expect.objectContaining({
@@ -50,14 +53,9 @@ describe('RPC URL Management', () => {
         })
       );
       
-      console.log('Step 3: Adding RPC URL to configuration');
       const result = config.addRpcUrl(validRpcUrl, false, logger);
-      console.log(`Step 4: Checking result of addRpcUrl: ${result}`);
       expect(result).toBe(true);
-      
-      console.log('Step 5: Verifying that mocked addRpcUrl was called with correct parameters');
       expect(mockedConfig.addRpcUrl).toHaveBeenCalledWith(validRpcUrl, false, logger);
-      console.log('Test completed successfully');
     });
 
     it('should add a valid RPC URL as default', async () => {
