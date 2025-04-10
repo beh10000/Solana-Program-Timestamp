@@ -15,8 +15,7 @@ This tool queries Solana RPC nodes to find the earliest transaction involving a 
 
 ## Solana Timestamp CLI: Architectural Overview
 
-The Solana Timestamp CLI employs a modular, service-oriented architecture designed for reliability and extensibility. Here's a professional breakdown of the architecture:
-
+The Solana Timestamp CLI employs a modular, service-oriented architecture designed for reliability and extensibility. 
 ### Core Architecture Components
 
 1. **Command Pattern Implementation**  
