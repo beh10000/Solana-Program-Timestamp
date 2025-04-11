@@ -22,6 +22,7 @@ export async function getTimestamp(
   let lastError: Error | null = null;
   const maxRetries = options?.retries ?? 3;
   const retryDelay = options?.retryDelay ?? 1000;
+  let currentBeforeSignature: string | undefined = undefined;
 
   for (const rpcUrl of endpoints) {
     try {
@@ -35,16 +36,24 @@ export async function getTimestamp(
       logger.debug(`Program ID validation passed: ${programId}`);
 
       
-      const firstBlockTime = await findFirstBlockTimestamp(connection, programId, logger, maxRetries, retryDelay);
+      const result = await findFirstBlockTimestamp(
+        connection, 
+        programId, 
+        logger, 
+        maxRetries, 
+        retryDelay,
+        currentBeforeSignature
+      );
 
-      if (firstBlockTime === null) {
+      if (result.timestamp === null) {
         logger.error(`Could not determine a valid block timestamp for program: ${programId}.`);
         throw new Error(`Could not determine deployment timestamp for program: ${programId}`);
       }
 
-      const timestamp = firstBlockTime;
+      // Preserve the current pagination state for potential fallback
+      currentBeforeSignature = result.lastSignature;
 
-      return timestamp;
+      return result.timestamp;
     } catch (error) {
       logger?.warn({ error, rpcUrl }, 'Failed to get timestamp from RPC URL');
       lastError = error as Error;
@@ -72,10 +81,11 @@ export async function getTimestamp(
  * @param logger - Logger instance for debug and error information
  * @param maxRetries - Maximum number of retry attempts for failed RPC calls
  * @param retryDelayMs - Delay in milliseconds between retry attempts
+ * @param startBeforeSignature - Optional signature to start pagination from (enables resuming progress)
  * 
- * @returns A Promise that resolves to:
- *   - The earliest block timestamp (in seconds) if found
- *   - null if no transactions with timestamps were found
+ * @returns A Promise that resolves to an object containing:
+ *   - timestamp: The earliest block timestamp (in seconds) if found, or null
+ *   - lastSignature: The last processed signature for resuming pagination
  * 
  * @throws Will propagate errors from the RPC connection after retry attempts are exhausted
  */
@@ -84,16 +94,17 @@ async function findFirstBlockTimestamp(
     programIdStr: string,
     logger: Logger,
     maxRetries: number,
-    retryDelayMs: number
-): Promise<number | null> {
+    retryDelayMs: number,
+    startBeforeSignature?: string
+): Promise<{ timestamp: number | null, lastSignature: string | undefined }> {
     let oldestSignature: string | null = null;
-    let currentBeforeSignature: string | undefined = undefined;
+    let currentBeforeSignature: string | undefined = startBeforeSignature;
     let firstTimestamp: number | null = null;
     const limit = 1000;
     const programId = new PublicKey(programIdStr);
     const operationName = `getSignaturesForAddress(${programIdStr})`;
 
-    logger.debug(`Starting search for the first signature for ${programIdStr}`);
+    logger.debug(`Starting search for the first signature for ${programIdStr}${startBeforeSignature ? ` continuing from ${startBeforeSignature}` : ''}`);
 
     while (true) {
         logger.debug(`Fetching signatures before: ${currentBeforeSignature || 'latest'}`);
@@ -116,7 +127,6 @@ async function findFirstBlockTimestamp(
             logger.debug('No more signatures found. Reached the beginning of history or no transactions exist.');
             break;
         }
-        
         
         const oldestInBatch = signaturesInfo[signaturesInfo.length - 1];
         oldestSignature = oldestInBatch.signature;
@@ -148,10 +158,8 @@ async function findFirstBlockTimestamp(
         logger.warn(`Could not determine a block timestamp for ${programIdStr}. The program might be unused or transactions lack blockTime data.`);
     }
 
-    return firstTimestamp;
+    return { timestamp: firstTimestamp, lastSignature: currentBeforeSignature };
 }
-
-
 
 /**
  * Validates if a string is a valid Solana program ID
